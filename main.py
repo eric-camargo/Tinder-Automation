@@ -1,10 +1,11 @@
 from selenium import webdriver
-import time
-import json
-
 from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
+import time
+import json
+
+import XPaths
 
 # Input your local variables
 with open("LoginData.json") as file:
@@ -13,8 +14,11 @@ with open("LoginData.json") as file:
     FABOOK_PASSWORD = data["facebook"]["password"]
     CHROME_DRIVER = data["chrome"]["driver"]
 
-LIKES_PER_SESSION = 15
-STANDARD_WAIT = 3
+print(CHROME_DRIVER)
+send_custom_message = True
+LIKES_PER_SESSION = 5
+SESSIONS = 3
+STANDARD_WAIT = 2
 TINDER_URL = "https://tinder.com/"
 
 def signin_click():
@@ -64,72 +68,69 @@ def login_with_facebook():
 
 def clear_popups():
     try:
-        allow_btn = driver.find_element_by_xpath('//*[@id="modal-manager"]/div/div/div/div/div[3]/button[1]')
-    except:
-        print("Não pediu Permissão")
-    else:
+        allow_btn = driver.find_element_by_xpath(XPaths.ALLOW_POPUP_BUTTON)
         allow_btn.click()
+    except Exception as e:
+        print(e)
 
     try:
-        accept_btn = driver.find_element_by_xpath('//*[@id="content"]/div/div[2]/div/div/div[1]/button')
-    except:
-        print("Não pediu para Aceitar Termos")
-    else:
+        accept_btn = driver.find_element_by_xpath(XPaths.ACCEPT_LOCATION_BUTTON)
         accept_btn.click()
+    except Exception as e:
+        print(e)
 
     try:
-        not_notify_btn = driver.find_element_by_xpath('//*[@id="modal-manager"]/div/div/div/div/div[3]/button[2]')
-    except:
-        print('Não pediu para Notificar')
-    else:
+        not_notify_btn = driver.find_element_by_xpath(XPaths.DO_NOT_NOTIFY_BUTTON)
         not_notify_btn.click()
+    except Exception as e:
+        print(e)
 
-
-def like():
+def send_likes():
     print(f"Waiting {STANDARD_WAIT} seconds to go to Next Like")
     time.sleep(STANDARD_WAIT)
 
-
-
     # Try to hit like
     try:
-        like_btn = driver.find_element_by_xpath(
-            '//*[@id="content"]/div/div[1]/div/main/div[1]/div/div/div[1]/div/div[2]/div[4]/button')
+        like_btn = driver.find_element_by_xpath(XPaths.LIKE_BUTTON)
         like_btn.click()
 
     # Maybe it doesn't find due to a popup that must be closed
     except NoSuchElementException as e:
-        print("Like apontou a Exception NoSuchElement")
-        # print(e)
+        print(e)
         try:
-            no_thanks = driver.find_element_by_xpath('//*[@id="modal-manager"]/div/div/button[2]')
+            no_thanks = driver.find_element_by_xpath(XPaths.NO_SUPERLIKE_THANKS)
             no_thanks.click()
         except Exception as e:
-            # print(e)
-            like()
+            print(e)
+            send_likes()
 
     # Componente em cima do like
     except ElementClickInterceptedException as e:
-        print("Like apontou a Exception ElementClickIntercepted")
-
+        print(e)
         try:
-            no_thanks = driver.find_element_by_xpath('//*[@id="modal-manager"]/div/div/button[2]')
+            # Deal with popup asking if you'd like to super like someone
+            no_thanks = driver.find_element_by_xpath(XPaths.NO_SUPERLIKE_THANKS)
             no_thanks.click()
         except:
-            print("Mandando Mensagem de olá")
-            # Get the name of the person
-            name = driver.find_element_by_xpath('//*[@id="modal-manager-canvas"]/div/div/div[1]/div/div[3]/div[2]').text.split()[0]
-            mandar_hello = driver.find_element_by_xpath('//*[@id="chat-text-area"]')
-            mandar_hello.send_keys(f"E aí {name}, como vc tá?")
-            time.sleep(2)
-            mandar_hello.send_keys(Keys.ENTER)
-            # close_popup_btn = driver.find_element_by_xpath('//*[@id="modal-manager-canvas"]/div/div/div[1]/div/div[4]/button')
-            # close_popup_btn.click()
-        else:
-            print("Clicando no Não Obrigado")
-    else:
-        print(f"Like enviado com sucesso!")
+            # Dealing with case where you've matched after a like
+            if send_custom_message:
+                # Get the name of the person
+                name = driver.find_element_by_xpath(XPaths.MATCHED_PERSON_NAME).text.split()[0]
 
+                # Automatically Send Introductory Message
+                mandar_hello = driver.find_element_by_xpath(XPaths.MATCHED_POPUP_INPUT)
+                mandar_hello.send_keys(f"E aí {name}, como vc tá?")
+                time.sleep(2)
+                mandar_hello.send_keys(Keys.ENTER)
+                print("Sent Custom Message")
+            else:
+                # Or you can close the Match Popup everytime
+                close_popup_btn = driver.find_element_by_xpath(XPaths.CLOSE_MATCH_POPUP_BUTTON)
+                close_popup_btn.click()
+
+    else:
+        print(f"Like sent!")
+        likes_sent += 1
 
 
 chrome_driver_path = CHROME_DRIVER
@@ -138,10 +139,13 @@ chrome_driver_path = CHROME_DRIVER
 chrome_options = Options()
 chrome_options.add_argument("user-data-dir=selenium")
 
-driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
-driver.get(TINDER_URL)
+for _ in range(SESSIONS):
+    driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
+    driver.get(TINDER_URL)
+    login()
+    likes_sent = 0
 
-login()
+    while likes_sent <= LIKES_PER_SESSION:
+        send_likes()
 
-for _ in range(LIKES_PER_SESSION):
-    like()
+    driver.close()

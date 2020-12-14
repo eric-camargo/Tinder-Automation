@@ -3,3 +3,6 @@ LoginData.json
 selenium/ 
 venv/ 
 debug.log 
+__pycache__/ 
+__pycache__/XPaths.cpython-39.pyc 
+*.pyc 
